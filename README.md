@@ -134,7 +134,8 @@ Sensensus is designed to withstand several attack vectors common to IoT networks
 ---
 
 ## Getting Started  
-To run the full end-to-end system, you will need to deploy the smart contract, flash the edge hardware, spin up the local auditor swarm, and launch the dashboard.
+To run the full end-to-end system, you will need to flash the edge hardware and spin up the local auditor swarm.
+
 ### Prerequisites
 * PlatformIO installed via VSCode.
 * Flow CLI installed on your host machine.
@@ -152,5 +153,30 @@ To run the full end-to-end system, you will need to deploy the smart contract, f
 - `WIFI_SSID` and `WIFI_PASS` (must be on the same network as your laptop)
 - `PICO_PRIV_KEY_HEX` (generate a random 64-character hex string for the Pico's identity)
 4. Navigate to `src/config.h` and tweak the values as required.
+
+#### Step 2. Run the Python Auditors & Trigger an Event
+
+Start your auditor nodes in separate terminal windows(use different identity files and ports to avoid issues) to simulate the decentralized swarm. If a physical transporter node isnt available, you can make use of the mock_transporter in the Transporter_Python folder to simulate anomalies.
+
+
+
+```bash
+cd auditors
+python auditor_node.py --key-file ../Identities/"YOUR_IDENTITY_FILE.pem" --flow-enabled --model /path/to/your/model --port 5011
+python auditor_node.py --key-file ../Identities/"YOUR_IDENTITY_FILE1.pem" --flow-enabled --model /path/to/your/model --port 5012
+```
+```bash
+cd Transporter_Python
+python mock_transporter.py
+```
+#### Step 3. Set up the Dashboard
+
+Use the [Dashboard](https://sensensus.vercel.app/) to visualize network consensus, reputation, and slashing events in real-time.
+Alternatively, run the dashboard on localhost to visualize IMU data on the dashboard using WebSerial API.(Use Chromium based browser)
+```bash
+cd dashboard
+npm install
+npm run dev
+```
 
 Once the network is live, physically drop the hardware. Watch the React Dashboard visualize the network consensus, intercept the UDP packets, process the x402 payment, and trigger the Flow slashing event in real-time.
