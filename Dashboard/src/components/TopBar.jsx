@@ -63,6 +63,9 @@ export default function TopBar({
       )}
 
       <div style={{ flex: 1 }} />
+      <button className="nav-btn" onClick={() => window.location.href = "/sensensus.html"}>
+        Architecture
+      </button>
 
       {/* Flow connection */}
       <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
