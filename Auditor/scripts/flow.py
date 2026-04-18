@@ -82,7 +82,7 @@ async def _submit_to_flow_async(body: dict):
     signer = _EcdsaSigner(sk)
     addr = Address.from_hex(flow_addr)
 
-    for attempt in range(3):
+    for attempt in range(7):
         try:
             async with flow_client(host="access.devnet.nodes.onflow.org", port=9000) as client:
                 account      = await client.get_account(address=addr)
@@ -116,9 +116,9 @@ async def _submit_to_flow_async(body: dict):
 
         except Exception as e:
             err = str(e)
-            if "sequence number" in err and attempt < 2:
-                print(f"[Flow] Seq number mismatch (attempt {attempt+1}) — retrying in 3s...")
-                await asyncio.sleep(3)
-                continue
+            if ("sequence number" in err or "No deposit" in err) and attempt < 5:
+                    print(f"[Flow] Deposit pending or Seq mismatch (attempt {attempt+1}) — retrying in 5s...")
+                    await asyncio.sleep(5)
+                    continue
             print(f"[Flow] submitVerdict error: {e}")
             return

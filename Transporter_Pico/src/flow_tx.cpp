@@ -16,6 +16,7 @@ static char    _account_addr[24];   // "0x<16 hex>"
 static uint8_t _account_raw[8];     // 8-byte raw Flow address for RLP
 static char    _contract_addr[24];
 static char    _api_host[64];       // "rest-testnet.onflow.org"
+static uint64_t _local_seq_num = 0;
 
 // ═════════════════════════════════════════════════════════════════════════════
 // §1  SHA3-256 — Keccak-f[1600], NIST padding 0x06
@@ -446,7 +447,12 @@ static const char *_expand(const char *tmpl) {
 static bool _submit_tx(const _tx_params *p, bool wait_seal, char tx_id_out[65]) {
     uint8_t  ref_id[32]; uint64_t seq_num;
     if (!_get_ref_block(ref_id)) return false;
-    if (!_get_seq_num(&seq_num))  return false;
+
+    if (_local_seq_num == 0) {
+        if (!_get_seq_num(&_local_seq_num)) return false;
+    }
+    seq_num = _local_seq_num;
+    _local_seq_num++;
 
     static uint8_t payload_rlp[8192];
     size_t plen = _build_rlp_payload(p, ref_id, seq_num, payload_rlp, sizeof(payload_rlp));
@@ -512,6 +518,7 @@ static bool _submit_tx(const _tx_params *p, bool wait_seal, char tx_id_out[65]) 
     if (code!=200 && code!=201) {
         Serial.printf("[FlowTx] POST /v1/transactions HTTP %d\n", code);
         Serial.printf("[FlowTx] %.300s\n", resp);
+        _local_seq_num = 0;  // reset local seq num on failure to resync with chain
         return false;
     }
 

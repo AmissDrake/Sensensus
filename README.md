@@ -99,6 +99,31 @@ Sensensus is designed to withstand several attack vectors common to IoT networks
 
 ---
 
+## Repository Structure
+```
+Sensensus/
+├── Transporter_Pico/          # Hardware edge node (Transporter)
+│   ├── src/
+│   │   ├── main.cpp           # Main state machine (Idle, Anomaly, Delivering)
+│   │   ├── inference.cpp      # TensorFlow Lite 1D-CNN execution
+│   │   ├── crypto.cpp         # ECDSA secp256r1 signature generation
+│   │   ├── network.cpp        # UDP Multicast, x402 HTTP Server
+│   │   └── flow_tx.cpp        # Native Flow blockchain transaction construction
+│   └── platformio.ini         # Hardware build configuration
+├── Auditor/                   # Auditor Swarm (Python)
+│   ├── auditor_node.py        # P2P Node daemon, x402 client, Flow SDK bridge
+│   ├── models/                # Scikit-learn Random Forest serialized models
+│   └── requirements.txt       # Python dependencies
+├── dashboard/                 # React Frontend (Mission Control)
+│   ├── src/
+│   │   ├── components/        # UI components (IMU Cube, Ledger Table)
+│   │   └── App.jsx            # Main dashboard view
+│   └── package.json           # Node dependencies
+└── contracts/                 # Smart Contracts
+    └── SwarmVerifierV4.cdc    # Core Cadence consensus & escrow logic
+```
+---
+
 ## Getting Started  
 To run the full end-to-end system, you will need to deploy the smart contract, flash the edge hardware, spin up the local auditor swarm, and launch the dashboard.
 ### Prerequisites
@@ -107,7 +132,7 @@ To run the full end-to-end system, you will need to deploy the smart contract, f
 * Node.js v18+ and npm.
 * Python 3.9+ with `scikit-learn` and `requests` installed.
 
-#### Step 1: Flash the Hardware (The Transporter)
+### Step 1: Flash the Hardware (The Transporter)
 1. Wiring the BNO085 to the Pico 2W:
 - `VIN` ➔ `3.3V (OUT)`
 - `GND` ➔ `GND`
@@ -117,6 +142,76 @@ To run the full end-to-end system, you will need to deploy the smart contract, f
 3. Navigate to `platformio.ini` and update the following definitions
 - `WIFI_SSID` and `WIFI_PASS` (must be on the same network as your laptop)
 - `PICO_PRIV_KEY_HEX` (generate a random 64-character hex string for the Pico's identity)
-4. Navigate to `src/config.h` and tweak the values as required.
+4. Navigate to `src/config.h` and tweak the values as required.  (Refer to the configuration section of the Readme)
+5. Build and upload the firmware via USB
+```
+pio run --target upload
+```
+6. Open the Serial Monitor at 115200 baud. You should see the Pico connect to Wi-Fi and register itself as a node on the Flow testnet.
 
-Once the network is live, physically drop the hardware. Watch the React Dashboard visualize the network consensus, intercept the UDP packets, process the x402 payment, and trigger the Flow slashing event in real-time.
+### Step 2: Spin up the Auditor Swarm (Python)
+To simulate a decentralized swarm on a single laptop, we need to run multiple auditor instances on different local UDP ports to prevent port collisions.
+1. Navigate to the `Auditor` directory and install the required ML and cryptography dependencies:
+
+```
+cd Auditor
+pip install -r requirements.txt
+# (Installs ecdsa, flow-py-sdk, numpy, pandas, scikit-learn, requests, python-dotenv, joblib)
+```
+2. Create a `.env` file in the `Auditor` directory with your Flow credentials:
+```
+FLOW_ACCOUNT_ADDR=0xYourFlowAccountAddress
+FLOW_ACCOUNT_KEY=YourFlowPrivateKeyHex
+FLOW_CONTRACT_ADDR=0xfcd23c8d1553708a
+```
+3. Open two separate terminal windows to launch two independent auditors. The script will automatically generate unique identity PEM files for each port:
+
+```
+# Terminal 1: Start Auditor A
+python auditor_node.py --key-file ../Identities/1.pem --port 5011 --flow-enabled --model models/choose_your_model
+
+# Terminal 2: Start Auditor B
+python auditor_node.py --key-file ../Identities/2.pem --port 5012 --flow-enabled --model models/choose_your_model
+```
+
+### Step 3: Launch the Dashboard
+1. Navigate to the `Dashboard` directory:
+```
+cd Dashboard
+npm install
+```
+2. Start the Vite development server:
+```
+npm run dev
+```
+3. Open your browser to `http://localhost:5173/`
+
+### Step 4: Trigger a Cyber-Physical Consensus Event
+With the entire stack running, it's time to test the swarm:
+1. Look at your **Pico Serial Monitor** (or the Dashboard log view). It should say `STATE_IDLE` and be sampling at 50Hz.
+2. Physically drop or agressively shake the Raspberry Pi Pico
+3. Watch the terminal cascades:
+- **Pico:** Detects the anomaly via TinyML (`conf >= 0.85`), transitions to `STATE_ANOMALY`, and broadcasts the UDP `PKT_ANOMALY` beacon.
+- **Auditor Terminals:** Intercept the beacon, verify the ECDSA signature, and fire back a `PKT_BID` to the Pico.
+- **Pico:** Collects the bids, selects the quorum, and sends `PKT_QUORUM`.
+- **Auditor Terminals:** Execute the x402 HTTP fetch, download the CSV, run the Random Forest ML verification, and submit their final signed verdict to the Flow testnet.
+- **Dashboard:** Watch the UI update in real-time as the Flow blockchain tallies the votes, settles the transaction, rewards the honest auditors, and uploads the final cryptographic proof to Storacha IPFS.
+
+## Configuration Reference
+
+### Hardware 
+| Macro | Description |
+|-------|-------------|
+|WIFI_SSID|The local 2.4GHz network for the Pico and Auditors.|
+|FLOW_CONTRACT_ADDR| The testnet address where SwarmVerifierV4 is deployed.|
+|PICO_PRIV_KEY_HEX | A 64-character hex string acting as the Transporter's identity.|
+|ANOMALY_CONFIDENCE_THRESHOLD | TinyML threshold to trigger an event (Default: 0.85).|
+|DEPOSIT_AMOUNT | The FLOW token toll required for auditors to unlock data. |
+
+
+### Auditors
+| Variable | Description |
+|-------|-------------|
+|FLOW_ACCOUNT_ADDR|The Flow testnet address paying gas for the auditor.|
+|FLOW_ACCOUNT_KEY| The private key for the auditor's Flow account.|
+|FLOW_CONTRACT_ADDR | Must match the Transporter's contract address.|
